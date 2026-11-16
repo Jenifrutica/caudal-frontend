@@ -35,7 +35,7 @@ Las dependencias apuntan hacia adentro: `app → features → state → services
 | `ui` | `i18n`, `core` (solo utilidades de formato) | `services`, `state`, `features`, `app` |
 | `app` | todo lo anterior | nada que lo importe a él |
 
-Se verifica con una regla de ESLint de importaciones restringidas (propuesta: `eslint-plugin-boundaries` o `no-restricted-imports` con patrones por carpeta, por definir). Un import que viola la tabla rompe el lint, no solo la revisión.
+Se verifica con `no-restricted-imports` y patrones por carpeta en `eslint.config.js` (funciones `layerPatterns` y `restrict`; verificado el 2026-11-16). Un import que viola la tabla rompe el lint, no solo la revisión.
 
 Regla adicional: los componentes de `features` no llaman a `fetch`, no leen `localStorage` y no construyen URLs. Todo pasa por `CaudalApi` a través de un hook de TanStack Query.
 
@@ -120,7 +120,7 @@ Las rutas se declaran en `src/app/router.tsx`. Las rutas no declaradas responden
 | Fontanero (`OPERATOR`) | `/operador` | `/operador/inicio`, `/operador/lectura/nueva`, `/operador/pendientes`, `/operador/cierre/:date`, `/operador/dano` | `RequireRole(['OPERATOR'])` |
 | Junta (`BOARD_ADMIN`, `BOARD_MEMBER`) | `/junta` | `/junta/tanque`, `/junta/propuestas`, `/junta/propuestas/:id`, `/junta/publicacion`, `/junta/reglas`, `/junta/reglas/:id`, `/junta/reglas/:id/historial`, `/junta/red` (sectores y válvulas), `/junta/actas`, `/junta/incidentes`, `/junta/entidades` | `RequireRole(['BOARD_ADMIN','BOARD_MEMBER'])`. Dentro, las acciones dependen de permisos (ver 4.1). |
 | Junta, solo administración | `/junta/usuarios` | `/junta/usuarios` | `RequireRole(['BOARD_ADMIN'])` |
-| Equipo (`PROJECT_TEAM`) | `/equipo` | `/equipo/evaluacion`, `/equipo/salud`, `/equipo/dispositivos`, `/equipo/auditoria`, `/equipo/importacion` (solo acueducto demo) | `RequireRole(['PROJECT_TEAM'])`. La importación además exige `aqueduct.isDemo` (por definir el campo). |
+| Equipo (`PROJECT_TEAM`) | `/equipo` | `/equipo/evaluacion`, `/equipo/salud`, `/equipo/dispositivos`, `/equipo/auditoria`, `/equipo/importacion` (solo acueducto demo) | `RequireRole(['PROJECT_TEAM'])`. La importación la restringe el **backend** al acueducto demo (`ImportIT` en `caudal-backend`). En el cliente, el campo es `isDemo` (`src/services/api/views.ts`, mapeado desde `aqueduct.is_demo` en `ApiDtoAdapter`), pero `ImportPage` hoy no lo consulta para ocultar la pantalla: pendiente de UX, dueño `NicoalsD`, revisión al cerrar la siguiente fase. |
 | Entidad de apoyo (`SUPPORT_ENTITY`) | `/entidad` | `/entidad/resumenes` | `RequireRole(['SUPPORT_ENTITY'])` |
 | Estado compartido | `/tanque` | `/tanque` (estado y pronóstico) | `RequireRole(['OPERATOR','BOARD_ADMIN','BOARD_MEMBER','PROJECT_TEAM'])` |
 
@@ -128,7 +128,7 @@ Las guardas de ruta son de experiencia, no de seguridad. El backend decide por r
 
 ### 4.1 Permisos por acción
 
-La matriz de la sección 9 de los hechos canónicos vive en la BD (`iam.role_permissions`). El frontend no hardcodea roles para decidir botones. Usa los códigos de permiso que devuelve `/auth/me` (nombre del campo por definir, verificar en OpenAPI) y un hook `usePermission('PROPOSAL_DECIDE')`. Códigos citados en los hechos: `READING_CREATE`, `RULESET_ACTIVATE`, `PROPOSAL_DECIDE`. Los demás se toman del OpenAPI cuando exista.
+La matriz de la sección 9 de los hechos canónicos vive en la BD (`iam.role_permissions`). El frontend no hardcodea roles para decidir botones. Usa los códigos de permiso que devuelve `/auth/me` en el campo `permissions: string[]` (`CurrentUserResponse` del OpenAPI, `src/services/api/schema.d.ts`) y el hook `usePermission('PROPOSAL_DECIDE')` (`src/state/hooks/usePermission.ts`). Códigos citados en los hechos: `READING_CREATE`, `RULESET_ACTIVATE`, `PROPOSAL_DECIDE`. Los demás se toman del OpenAPI cuando exista.
 
 ### 4.2 Guardas
 
@@ -156,7 +156,7 @@ La matriz de la sección 9 de los hechos canónicos vive en la BD (`iam.role_per
 | `SessionRefresher` | Un solo refresh en vuelo (single-flight): si varias peticiones reciben 401 a la vez, todas esperan la misma promesa. |
 | `AuthHttpClient` | Decorador de `HttpClient`. Añade `Authorization: Bearer`, y ante un 401 intenta refresh una vez y reintenta la petición original. Si el refresh falla, limpia la sesión y emite `SessionExpired`. |
 | `SessionStore` | Estado observable: `anonymous`, `authenticated`, `expired`. Lo lee `useSession()`. |
-| `BroadcastChannel('caudal-session')` | Propaga el cierre de sesión a otras pestañas (propuesta, verificar soporte en iOS Safari). |
+| `BroadcastChannel('caudal-session')` | Propaga el cierre de sesión a otras pestañas. **No implementado** (no hay `BroadcastChannel` en `src/`, búsqueda del 2026-11-16): hoy cada pestaña descubre el cierre al fallar su refresh. Dueño `NicoalsD`, revisión al cerrar la siguiente fase. |
 
 ### 5.3 Refresh proactivo
 
@@ -187,7 +187,7 @@ Sin este modo, un fontanero que recarga la página sin señal no puede registrar
 - `retry`: 1 para queries; 0 para mutaciones (las reintenta la cola offline, no TanStack). Un `4xx` no se reintenta. Si el servidor no responde (error de red, `502`, `503` o `504`) y el navegador está en línea, la query sigue intentando hasta 24 veces, con esperas de 2 a 5 s: el plan gratuito de Render duerme la API y tarda unos 3 minutos en arrancar (`core/policy/queryRetry.ts`).
 - `ServerReachability` (Observer) recibe de `ReachabilityHttpClient` (Decorator junto al transporte) si cada intento llegó al servidor. Mientras no llega, `ServerWakeNotice` muestra un solo aviso para toda la app en lugar de un error por bloque.
 - `refetchOnWindowFocus`: true para estado del tanque y propuestas; false para catálogos.
-- `staleTime` por query (valores por definir en `src/core/policy/clientPolicy.ts`). Referencias (`meta/constraints`, `catalogs`) pueden tener `staleTime` largo porque cambian poco; `rule-sets/current` se invalida al activar una versión.
+- `staleTime` por query, desde `src/core/policy/clientPolicy.ts`: las referencias usan `REFERENCE_STALE_TIME_MS` (1 hora) en `useConstraints` y `readingQueries`. Referencias (`meta/constraints`, `catalogs`) pueden tener `staleTime` largo porque cambian poco; `rule-sets/current` se invalida al activar una versión.
 
 ### 6.2 Claves
 
@@ -249,19 +249,20 @@ Los formularios no tienen límites escritos a mano. Las reglas salen del backend
 4. El hook `useFormSchema('reading')` devuelve el esquema o `undefined` mientras carga. El formulario muestra el estado de carga; no usa un esquema por defecto.
 5. React Hook Form usa `zodResolver(schema)`. Los mensajes salen de `src/i18n/es.ts` con las claves de error (`validation.max`, `validation.decimalPlaces`, etc.) e interpolación.
 
-### 7.2 Forma de la respuesta de `/meta/constraints` (ejemplo, verificar en OpenAPI)
+### 7.2 Forma de la respuesta de `/meta/constraints`
+
+Verificada el 2026-11-16 contra la API local (`GET /api/v1/meta/constraints`) y el esquema `ConstraintsResponse` del OpenAPI. Es un mapa plano de campo → límites, **sin** envoltorio `fields`:
 
 ```json
 {
-  "fields": {
-    "reading.note": { "min": 0, "max": 500, "maxLines": 10 },
-    "change_reason": { "min": 10, "max": 500 },
-    "sector.name": { "min": 2, "max": 60, "pattern": "..." }
-  }
+  "username": { "min": 3, "max": 32, "pattern": "^[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]$" },
+  "password": { "min": 12, "max": 128 },
+  "person_name": { "min": 2, "max": 80, "pattern": "..." },
+  "sector.code": { "max": 20, "pattern": "..." }
 }
 ```
 
-La forma exacta se confirma con el OpenAPI del backend (`/v3/api-docs`). El frontend no inventa claves: si una no existe, el formulario no se arma y se muestra un error de configuración.
+`MetaApi` lo convierte en `ConstraintsMap` (`src/core/forms/FieldConstraint.ts`). El frontend no inventa claves: si una no existe, el formulario no se arma y se muestra un error de configuración.
 
 ### 7.3 Reglas de cambio
 

@@ -12,7 +12,7 @@ React 19 · Vite · TypeScript · PWA sin conexión.
 
 ## Estado
 
-**v1.0.0.** La aplicación cubre a los cinco actores: horario público y reporte de daños, sesión, fontanero (con cola sin conexión), Junta (tanque, propuestas, reglas, actas, incidentes, entidades y usuarios), equipo del proyecto y entidades de apoyo. Detalle por actor, rutas y verificación en [docs/Version-1.0.0.md](docs/Version-1.0.0.md).
+**Funcionalidad de la v1.0.0 completa** (la etiqueta git `v1.0.0` aún no está creada; verificado el 2026-11-16 en `develop`, `c0e474c`: `pnpm build` pasa). Desplegada en https://caudal-frontend.vercel.app/. La aplicación cubre a los cinco actores: horario público y reporte de daños, sesión, fontanero (con cola sin conexión), Junta (tanque, propuestas, reglas, actas, incidentes, entidades y usuarios), equipo del proyecto y entidades de apoyo. Detalle por actor, rutas y verificación en [docs/Version-1.0.0.md](docs/Version-1.0.0.md).
 
 ## Documentación
 
@@ -21,6 +21,17 @@ React 19 · Vite · TypeScript · PWA sin conexión.
 - [`.agents/`](.agents/): arquitectura, pantallas, cola sin conexión, tema visual, seguridad, patrones y pruebas.
 - Documentación canónica del proyecto: [`caudal-backend/docs`](https://github.com/NicoalsD/caudal-backend/tree/develop/docs).
 - [Política de seguridad](SECURITY.md) y [cómo contribuir](CONTRIBUTING.md).
+
+## Arranque rápido
+
+Sistema completo con un comando, desde `caudal-backend` (los cuatro repositorios como carpetas hermanas): `make up` construye este repositorio con su `Dockerfile` (Node 24 + pnpm para compilar y nginx sin privilegios para servir, con fallback de SPA y las mismas cabeceras de `vercel.json`) y lo publica en http://localhost:8081 contra la API local (`VITE_API_BASE_URL=http://localhost:8080/api/v1`). Guía: [Arranque local](https://github.com/Jenifrutica/caudal-backend/blob/develop/docs/Arranque-local.md). La cola sin conexión se justifica en [ADR-007](https://github.com/Jenifrutica/caudal-backend/blob/develop/docs/ADRs/ADR-007-cola-offline-indexeddb.md).
+
+Solo esta imagen:
+
+```bash
+docker build --build-arg VITE_API_BASE_URL=http://localhost:8080/api/v1 -t caudal-web:local .
+docker run --rm -p 8081:8080 caudal-web:local       # http://localhost:8081
+```
 
 ## Cómo correrlo
 
